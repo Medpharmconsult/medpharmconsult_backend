@@ -1,0 +1,21 @@
+{
+  "name": "medpharmconsult_backend",
+  "version": "1.0.0",
+  "description": "medical consultation app",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start:dev": "nodemon index.js"
+  },
+  "author": "Adriel Amadi",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.0",
+    "mongodb": "5.5"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}
