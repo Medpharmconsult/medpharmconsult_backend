@@ -1,6 +1,6 @@
 const express = require('express')
 
-//const router = require('./routes/router')
+const router = require('./routes/router')
 
 //const utilities = require('./lib/utilities')
 const database = require('./lib/database')
@@ -17,7 +17,7 @@ app.use((req, res, next)=>{
     next()
 })
 
-//app.use(router)
+app.use(router)
 
 
 database.connect(()=>{
