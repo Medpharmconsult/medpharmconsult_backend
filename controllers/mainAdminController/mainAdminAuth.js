@@ -1,6 +1,6 @@
 const {ObjectId}  = require('mongodb')
 const database = require("../../lib/database")
-//const email = require('../../lib/email')
+const email = require('../../lib/email')
 
 const utilities = require("../../lib/utilities")
 
@@ -29,7 +29,7 @@ mainAdminAuth.login = ('/login', async (req, res)=>{
                 if(payload.password === mainAdminObj.password){
                     //send response
                     const token = utilities.jwt('sign', {userID: mainAdminObj._id, tokenFor: "mainAdmin"})
-                    utilities.setResponseData(res, 200, {'content-type': 'application/json'}, {statusCode: 200, medpharmconsultToken: token}, true )
+                    utilities.setResponseData(res, 200, {'content-type': 'application/json'}, {statusCode: 200, mpcToken: token}, true )
                 }
                 else{
                     utilities.setResponseData(res, 400, {'content-type': 'application/json'}, {statusCode: 400, msg: "wrong username or password"}, true )
@@ -59,64 +59,64 @@ mainAdminAuth.login = ('/login', async (req, res)=>{
 
 
 
-// adminAuth.updatePassword = ('/update-password', async (req, res)=>{
-//   //get the decoded token
-//   const decodedToken = req.decodedToken
-//   //create token 
-//   const newToken = utilities.jwt('sign', {userID: decodedToken.userID, tokenFor: decodedToken.tokenFor})
-//   let payload = JSON.parse(req.body)
+mainAdminAuth.updatePassword = ('/update-password', async (req, res)=>{
+  //get the decoded token
+  const decodedToken = req.decodedToken
+  //create token 
+  const newToken = utilities.jwt('sign', {userID: decodedToken.userID, tokenFor: decodedToken.tokenFor})
+  let payload = JSON.parse(req.body)
   
-//   try{
-//     //Check if the data sent is valid
-//     if(utilities.validator(payload, ['oldPassword', 'newPassword']).isValid){
+  try{
+    //Check if the data sent is valid
+    if(utilities.passwordValidator(payload).isValid){
   
-//       //remove all white spaces from user data if any
-//       payload = utilities.trimmer(payload)
+      //remove all white spaces from user data if any
+      payload = utilities.trimmer(payload)
   
-//       //get admin object
-//       const adminObj = await database.findOne({_id: ObjectId(decodedToken.userID)}, database.collection.admins)
+      //get admin object
+      const mainAdminObj = await database.findOne({_id: new ObjectId(decodedToken.userID)}, database.collection.mainAdmins)
   
-//       //hash the old and new password
-//       payload.oldPassword = utilities.dataHasher(payload.oldPassword)
-//       payload.newPassword = utilities.dataHasher(payload.newPassword)
+      //hash the old and new password
+      payload.oldPassword = utilities.dataHasher(payload.oldPassword)
+      payload.newPassword = utilities.dataHasher(payload.newPassword)
   
-//       //check if old password in payload matches the password in the trader object
-//       if(payload.oldPassword === adminObj.password){
-//         //create new otp
-//         const newOtp = utilities.otpMaker()
+      //check if old password in payload matches the password in the trader object
+      if(payload.oldPassword === mainAdminObj.password){
+        //create new otp
+        const newOtp = utilities.otpMaker()
   
-//         //delete a userID if it exist in the pendingUsersUpdates
-//         await database.deleteOne({userID: ObjectId(decodedToken.userID)}, database.collection.pendingUsersUpdates)
+        //delete a userID if it exist in the pendingUsersUpdates
+        await database.deleteOne({userID: new ObjectId(decodedToken.userID)}, database.collection.pendingUsersUpdates)
   
-//         //insert the admin in the pendingUsersUpdates collection
-//         await database.insertOne({userID: ObjectId(decodedToken.userID), createdAt: new Date(), otp: newOtp, dataToUpdate: {parameter: 'password', value: payload.newPassword}}, database.collection.pendingUsersUpdates)
+        //insert the admin in the pendingUsersUpdates collection
+        await database.insertOne({userID: new ObjectId(decodedToken.userID), createdAt: new Date(), otp: newOtp, dataToUpdate: {parameter: 'password', value: payload.newPassword}}, database.collection.pendingUsersUpdates)
   
-//         //send new otp to email
-//         await email.sendOtp('entamarketltd@gmail.com', adminObj.email, "OTP Verification", `hello ${adminObj.username}, please verify your email with this OTP:`, newOtp)
+        //send new otp to email
+        await email.sendOTP('medpharmconsult7@gmail.com', mainAdminObj.email, "OTP Verification", email.OtpMessage(mainAdminObj.username, newOtp))
   
-//         //send token
-//         utilities.setResponseData(res, 200, {'content-type': 'application/json'}, {statusCode: 200, entamarketToken: newToken}, true )
+        //send token
+        utilities.setResponseData(res, 200, {'content-type': 'application/json'}, {statusCode: 200, msg: "An OTP has been sent to your email"}, true )
   
-//       }
-//       else{
-//         utilities.setResponseData(res, 400, {'content-type': 'application/json'}, {statusCode: 400, msg: `Old password doesn't match the password of this trader`, entamarketToken: newToken}, true )
-//         return
-//       }
+      }
+      else{
+        utilities.setResponseData(res, 400, {'content-type': 'application/json'}, {statusCode: 400, msg: `Old password doesn't match the password of this trader`}, true )
+        return
+      }
   
-//     }
-//     else{
-//       utilities.setResponseData(res, 400, {'content-type': 'application/json'}, {statusCode: 400, msg: `Invalid data, make sure password is 8 characters long`, entamarketToken: newToken}, true )
-//       return
-//     }
+    }
+    else{
+      utilities.setResponseData(res, 400, {'content-type': 'application/json'}, {statusCode: 400, msg: `Invalid data, make sure password is 8 characters long`}, true )
+      return
+    }
   
-//   }
-//   catch(err){
-//     console.log(err)
-//     utilities.setResponseData(res, 500, {'content-type': 'application/json'}, {statusCode: 500, msg: 'Something went wrong with server', entamarketToken: newToken}, true )
-//     return
-//   }
+  }
+  catch(err){
+    console.log(err)
+    utilities.setResponseData(res, 500, {'content-type': 'application/json'}, {statusCode: 500, msg: 'Something went wrong with server'}, true )
+    return
+  }
   
-// })
+})
 
 
 // adminAuth.verifyUpdateOtp = ('verify-update-otp', async (req, res)=>{
