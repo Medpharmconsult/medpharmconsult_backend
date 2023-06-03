@@ -19,24 +19,40 @@ mainAdminController.addAdmin = ('/add-admin', async (req, res)=>{
             payload = utilities.trimmer(payload)
 
             //Check if the username or email exists
-            const adminObj = await database.findOne({$or: [{username: payload.username}, {email: payload.email}]}, database.collection.admins)
+            let adminObj = await database.findOne({$or: [{username: payload.username}, {email: payload.email}]}, database.collection.pendingAdmins)
+           
 
             if(!adminObj){
-                //hash the password
-                payload.password = utilities.dataHasher(payload.password)
 
-                //make otp and add to payload
-                payload.otp = utilities.otpMaker()
+                adminObj = await database.findOne({$or: [{username: payload.username}, {email: payload.email}]}, database.collection.admins)
+                if(!adminObj){
+                    //hash the password
+                    payload.password = utilities.dataHasher(payload.password)
 
-                //Add payload to pendingAdmins collection
-                await new PendingAdmin(payload).save()
+                    //make otp and add to payload
+                    payload.otp = utilities.otpMaker()
 
-                //send email to pending admin
-                await email.sendAdminInvitation("medpharmconsult7@gmail.com", payload.email, "Admin Invitation", email.adminInvitationMessage(payload.username, payload.otp))
+                    //Add payload to pendingAdmins collection
+                    await new PendingAdmin(payload).save()
 
-                //Send response 
-                utilities.setResponseData(res, 200, {'content-type': 'application/json'}, {statusCode: 200, msg: "Admin added successfully"}, true )
-                return
+                    //send email to pending admin
+                    await email.sendAdminInvitation("medpharmconsult7@gmail.com", payload.email, "Admin Invitation", email.adminInvitationMessage(payload.username, payload.otp))
+
+                    //Send response 
+                    utilities.setResponseData(res, 200, {'content-type': 'application/json'}, {statusCode: 200, msg: "Admin added successfully"}, true )
+                    return
+                }
+                else{
+                    if(payload.username == adminObj.username){
+                        utilities.setResponseData(res, 400, {'content-type': 'application/json'}, {statusCode: 400, msg: "This username already exists"}, true )
+                        return
+                    }
+    
+                    utilities.setResponseData(res, 400, {'content-type': 'application/json'}, {statusCode: 400, msg: "This email already exists"}, true )
+                    return
+
+                }
+               
             }
             else{
                 if(payload.username == adminObj.username){
