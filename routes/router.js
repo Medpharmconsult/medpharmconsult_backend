@@ -5,8 +5,9 @@ const router = express.Router()
 const mainAdminAuth = require("../controllers/mainAdminController/mainAdminAuth")
 const mainAdminController = require("../controllers/mainAdminController/mainAdminController")
 const adminAuth = require("../controllers/adminController/adminAuth")
+const adminController = require("../controllers/adminController/adminController")
 
-const {bodyParser, isJwtValid, decodeToken, isMainAdmin, isAdmin, isJSON} = require('../lib/middleware')
+const {bodyParser, isJwtValid, decodeToken, isMainAdmin, isAdmin, isUserValid, isJSON} = require('../lib/middleware')
 
 
 
@@ -18,9 +19,12 @@ router.post('/mainadmin/add-admin', bodyParser, isJwtValid, decodeToken, isMainA
 
 //ADMIN AUTH
 router.get("/admin/login", bodyParser, isJSON, adminAuth.login)
-router.put("/admin/update-password", bodyParser, isJwtValid, decodeToken, isJSON, adminAuth.updatePassword)
-router.put("/admin/verify-update-otp", bodyParser, isJwtValid, decodeToken, isJSON, adminAuth.verifyUpdateOtp)
-router.put('/admin/update-email', bodyParser, isJwtValid, decodeToken, isJSON, adminAuth.updateEmail)
-router.put('/admin/update-username', bodyParser, isJwtValid, decodeToken, isJSON, adminAuth.updateUsername)
+router.put("/admin/update-password", bodyParser, isJwtValid, decodeToken, isUserValid, isJSON, adminAuth.updatePassword)
+router.put("/admin/verify-update-otp", bodyParser, isJwtValid, decodeToken, isUserValid, isJSON, adminAuth.verifyUpdateOtp)
+router.put('/admin/update-email', bodyParser, isJwtValid, decodeToken, isUserValid, isJSON, adminAuth.updateEmail)
+router.put('/admin/update-username', bodyParser, isJwtValid, decodeToken, isUserValid, isJSON, adminAuth.updateUsername)
+
+//ADMIN CONTROLLER
+router.post('/admin/accept-invitation', bodyParser, isJSON, adminController.acceptInvitation)
 
 module.exports = router

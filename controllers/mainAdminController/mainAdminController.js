@@ -1,4 +1,4 @@
-const {ObjectId}  = require('mongodb')
+
 const database = require("../../lib/database")
 const PendingAdmin = require("../../models/pendingAdmin")
 const email = require('../../lib/email')
@@ -17,6 +17,15 @@ mainAdminController.addAdmin = ('/add-admin', async (req, res)=>{
         if(utilities.adminSignupValidator(payload, ["username", "email", "password"]).isValid){
             //remove white spaces
             payload = utilities.trimmer(payload)
+
+            //Check if the user username and email already exists in the pending Admins collection
+            const overwritePendingAdmin = await database.db.collection(database.collection.pendingAdmins).findOne({$and: [
+                {username: payload.username}, {email: payload.email}
+            ]})
+
+            if(overwritePendingAdmin){
+                await database.deleteOne({_id: overwritePendingAdmin._id}, database.collection.pendingAdmins)
+            }
 
             //Check if the username or email exists
             let adminObj = await database.findOne({$or: [{username: payload.username}, {email: payload.email}]}, database.collection.pendingAdmins)
@@ -39,7 +48,7 @@ mainAdminController.addAdmin = ('/add-admin', async (req, res)=>{
                     await email.sendAdminInvitation("medpharmconsult7@gmail.com", payload.email, "Admin Invitation", email.adminInvitationMessage(payload.username, payload.otp))
 
                     //Send response 
-                    utilities.setResponseData(res, 200, {'content-type': 'application/json'}, {statusCode: 200, msg: "Admin added successfully"}, true )
+                    utilities.setResponseData(res, 200, {'content-type': 'application/json'}, {statusCode: 200, msg: "An invitation has been sent to the potential Admin"}, true )
                     return
                 }
                 else{
