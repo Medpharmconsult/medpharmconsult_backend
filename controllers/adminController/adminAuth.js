@@ -1,5 +1,8 @@
 const {ObjectId}  = require('mongodb')
-const database = require("../../lib/database")
+const MainAdmin = require("../../models/mainAdmin")
+const Admin = require("../../models/admin")
+const PendingAdmin = require("../../models/pendingAdmin")
+const PendingUserUpdate = require("../../models/pendingUserUpdate")
 const email = require('../../lib/email')
 
 const utilities = require("../../lib/utilities")
@@ -21,13 +24,14 @@ adminAuth.login = ('/login', async (req, res)=>{
       payload.password = utilities.dataHasher(payload.password)
 
       //Check if the username exists
-      const adminObj = await database.findOne({username: payload.username}, database.collection.admins)
-            
-      if(adminObj){
+      const adminObj =  new Admin()
+      const adminProps = await adminObj.getPropsOne({username: payload.username})
+      //const adminObj = await database.findOne({username: payload.username}, database.collection.admins)
+      if(adminProps){
         //check if the password from the client matches the password from the database
-        if(payload.password === adminObj.password){
+        if(payload.password === adminProps.password){
           //send response
-          const token = utilities.jwt('sign', {userID: adminObj._id, tokenFor: "admin"})
+          const token = utilities.jwt('sign', {userID: adminProps._id, tokenFor: "admin"})
           utilities.setResponseData(res, 200, {'content-type': 'application/json'}, {statusCode: 200, mpcToken: token}, true )
         }
         else{
@@ -64,8 +68,10 @@ adminAuth.updatePassword = ('/update-password', async (req, res)=>{
   let payload = JSON.parse(req.body)
   
   try{
-    let collectionName;
-    decodedToken.tokenFor == "mainAdmin" ? collectionName = database.collection.mainAdmins : collectionName = database.collection.admins
+
+    let adminObj;
+    decodedToken.tokenFor == "mainAdmin" ? adminObj = new MainAdmin() : adminObj = new Admin()
+    
     //Check if the data sent is valid
     if(utilities.passwordValidator(payload).isValid){
   
@@ -73,25 +79,25 @@ adminAuth.updatePassword = ('/update-password', async (req, res)=>{
       payload = utilities.trimmer(payload)
   
       //get admin object
-      const adminObj = await database.findOne({_id: new ObjectId(decodedToken.userID)}, database.collection[collectionName])
-  
+      const adminProps = await adminObj.getPropsOne({_id: new ObjectId(decodedToken.userID)})
+      
       //hash the old and new password
       payload.oldPassword = utilities.dataHasher(payload.oldPassword)
       payload.newPassword = utilities.dataHasher(payload.newPassword)
   
       //check if old password in payload matches the password in the trader object
-      if(payload.oldPassword === adminObj.password){
+      if(payload.oldPassword === adminProps.password){
         //create new otp
         const newOtp = utilities.otpMaker()
   
         //delete a userID if it exist in the pendingUsersUpdates
-        await database.deleteOne({userID: new ObjectId(decodedToken.userID)}, database.collection.pendingUsersUpdates)
-  
+        await new PendingUserUpdate().deleteOne({userID: new ObjectId(decodedToken.userID)})
+        
         //insert the admin in the pendingUsersUpdates collection
-        await database.insertOne({userID: new ObjectId(decodedToken.userID), createdAt: new Date(), otp: newOtp, dataToUpdate: {parameter: 'password', value: payload.newPassword}}, database.collection.pendingUsersUpdates)
-  
+        await new PendingUserUpdate({userID: new ObjectId(decodedToken.userID), otp: newOtp, dataToUpdate: {parameter: 'password', value: payload.newPassword}}).save()
+        
         //send new otp to email
-        await email.sendOTP('medpharmconsult7@gmail.com', adminObj.email, "OTP Verification", email.OtpMessage(adminObj.username, "password", newOtp))
+        await email.sendText('medpharmconsult7@gmail.com', adminProps.email, "OTP Verification", email.OtpMessage(adminProps.username, "password", newOtp))
   
         //send token
         utilities.setResponseData(res, 200, {'content-type': 'application/json'}, {statusCode: 200, msg: "An OTP has been sent to your email"}, true )
@@ -124,21 +130,22 @@ adminAuth.verifyUpdateOtp = ('verify-update-otp', async (req, res)=>{
   let payload = JSON.parse(req.body)
   
   try{
-    let collectionName;
-    decodedToken.tokenFor == "mainAdmin" ? collectionName = database.collection.mainAdmins : collectionName = database.collection.admins
-
+    let adminObj;
+    decodedToken.tokenFor == "mainAdmin" ? adminObj = new MainAdmin() : adminObj = new Admin()
+    
     //check if payload is valid
     if(utilities.otpValidator(payload).isValid){
       //extract data from the pendingUsersUpdates collection
-      userObj = await database.findOne({userID: new ObjectId(decodedToken.userID)}, database.collection.pendingUsersUpdates, ['otp', 'dataToUpdate'], 1)
-   
+      const pendingUserUpdateObj = new PendingUserUpdate()
+      const pendingUserUpdateProps = await pendingUserUpdateObj.getPropsOne({userID: new ObjectId(decodedToken.userID)}, ['otp', 'dataToUpdate'], 1)
+      
       //check if payload otp matches the otp in the userObj collection
-      if(payload.otp === userObj.otp){
+      if(payload.otp === pendingUserUpdateProps.otp){
         //update the data of the admin
-        await database.updateOne({_id: new ObjectId(decodedToken.userID)}, database.collection[collectionName], {[userObj.dataToUpdate.parameter]: userObj.dataToUpdate.value})
-  
+        await adminObj.updateOne({_id: new ObjectId(decodedToken.userID)}, {[pendingUserUpdateProps.dataToUpdate.parameter]: pendingUserUpdateProps.dataToUpdate.value})
+       
         //delete user from pendingUsersUpdates collection
-        await database.deleteOne({userID: new ObjectId(decodedToken.userID)}, database.collection.pendingUsersUpdates)
+        await pendingUserUpdateObj.deleteOne({userID: new ObjectId(decodedToken.userID)})
   
         //send token
         utilities.setResponseData(res, 200, {'content-type': 'application/json'}, {statusCode: 200, msg: "success"}, true )
@@ -172,43 +179,53 @@ adminAuth.updateEmail = ('/update-email', async (req, res)=>{
   let payload = JSON.parse(req.body)
   
   try{
-    let collectionName;
-    decodedToken.tokenFor == "mainAdmin" ? collectionName = database.collection.mainAdmins : collectionName = database.collection.admins
-
+    let adminObj;
+    decodedToken.tokenFor == "mainAdmin" ? adminObj = new MainAdmin() : adminObj = new Admin()
+    
     //Check if the data sent is valid
     if(utilities.emailValidator(payload).isValid){
   
       //remove all white spaces from user data if any
       payload = utilities.trimmer(payload)
+
+      //check if email already exists in admins and pendingAdmis and mainAdmins collection
+      const doesEmailExistInMainAdmin = await new MainAdmin().getPropsOne({email: payload.email}, ["email"], 1)
+      const doesEmailExistInAdmin = await new Admin().getPropsOne({email: payload.email}, ["email"], 1)
+      const doesEmailExistInPendingAdmin = await new PendingAdmin().getPropsOne({email: payload.email}, ["email"], 1)
+
+      if(!doesEmailExistInMainAdmin && !doesEmailExistInAdmin && !doesEmailExistInPendingAdmin){
+        //hash the password
+        payload.password = utilities.dataHasher(payload.password)
   
-      //hash the password
-      payload.password = utilities.dataHasher(payload.password)
+        //get admin object properties
+        const adminProps = await adminObj.getPropsOne({_id: new ObjectId(decodedToken.userID)})
   
-      //get admin object
-      const adminObj = await database.findOne({_id: new ObjectId(decodedToken.userID)}, database.collection[collectionName])
-  
-      //check if the payload password matches the password from the trader object
-      if(payload.password === adminObj.password){
+        //check if the payload password matches the password from the admin object property
+        if(payload.password === adminProps.password){
           
-        //add create otp
-        const newOtp = utilities.otpMaker()
+          //add create otp
+          const newOtp = utilities.otpMaker()
   
-        //delete a userID if it exist in the pendingUsersUpdates
-        await database.deleteOne({userID: new ObjectId(decodedToken.userID)}, database.collection.pendingUsersUpdates)
+          //delete a userID if it exist in the pendingUsersUpdates
+          await new PendingUserUpdate().deleteOne({userID: new ObjectId(decodedToken.userID)})
   
-        //add user to pendingUsersUpdates collection
-        await database.insertOne({userID: new ObjectId(decodedToken.userID), createdAt: new Date(), otp: newOtp, dataToUpdate: {parameter: 'email', value: payload.email}}, database.collection.pendingUsersUpdates)
+          //add user to pendingUsersUpdates collection
+          await new PendingUserUpdate({userID: new ObjectId(decodedToken.userID), otp: newOtp, dataToUpdate: {parameter: 'email', value: payload.email}}).save()
           
-        //send the new otp to the new email
-        await email.sendOTP('medpharmconsult7@gmail.com', payload.email, "OTP Verification", email.OtpMessage(adminObj.username, "email", newOtp))
+          //send the new otp to the new email
+          await email.sendText('medpharmconsult7@gmail.com', payload.email, "OTP Verification", email.OtpMessage(adminProps.username, "email", newOtp))
   
-        //send token
-        utilities.setResponseData(res, 200, {'content-type': 'application/json'}, {statusCode: 200, msg: "An OTP has been sent to your new email"}, true )
-  
-  
+          //send token
+          utilities.setResponseData(res, 200, {'content-type': 'application/json'}, {statusCode: 200, msg: "An OTP has been sent to your new email"}, true )
+
+        }
+        else{
+          utilities.setResponseData(res, 400, {'content-type': 'application/json'}, {statusCode: 400, msg: `Invalid password`}, true )
+          return
+        }
       }
       else{
-        utilities.setResponseData(res, 400, {'content-type': 'application/json'}, {statusCode: 400, msg: `Invalid password`}, true )
+        utilities.setResponseData(res, 400, {'content-type': 'application/json'}, {statusCode: 400, msg: `Email already exists`}, true )
         return
       }
   
@@ -234,46 +251,55 @@ adminAuth.updateUsername = ('/update-username', async (req, res)=>{
   let payload = JSON.parse(req.body)
   
   try{
-    let collectionName;
-    decodedToken.tokenFor == "mainAdmin" ? collectionName = database.collection.mainAdmins : collectionName = database.collection.admins
+    let adminObj;
+    decodedToken.tokenFor == "mainAdmin" ? adminObj = new MainAdmin() : adminObj = new Admin()
+    
     //Check if the data sent is valid
     if(utilities.usernameValidator(payload).isValid){
   
       //remove all white spaces from user data if any
       payload = utilities.trimmer(payload)
+
+      //check if username already exists in admins and pendingAdmis and mainAdmins collection
+      const doesUsernameExistInMainAdmin = await new MainAdmin().getPropsOne({username: payload.username}, ["username"], 1)
+      const doesUsernameExistInAdmin = await new Admin().getPropsOne({username: payload.username}, ["username"], 1)
+      const doesUsernameExistInPendingAdmin = await new PendingAdmin().getPropsOne({username: payload.username}, ["username"], 1)
+
+      if(!doesUsernameExistInMainAdmin && !doesUsernameExistInAdmin && !doesUsernameExistInPendingAdmin){
+        //hash the password
+        payload.password = utilities.dataHasher(payload.password)
   
-      //hash the password
-      payload.password = utilities.dataHasher(payload.password)
-  
-      //get admin object
-      const adminObj = await database.findOne({_id: new ObjectId(decodedToken.userID)}, database.collection[collectionName])
-  
-      //check if the payload password matches the password from the trader object
-      if(payload.password === adminObj.password){
+        //get admin object properties
+        const adminProps = await adminObj.getPropsOne({_id: new ObjectId(decodedToken.userID)})
+      
+        //check if the payload password matches the password from the trader object
+        if(payload.password === adminProps.password){
           
-        //add create otp
-        const newOtp = utilities.otpMaker()
+          //add create otp
+          const newOtp = utilities.otpMaker()
   
-        //delete a userID if it exist in the pendingUsersUpdates
-        await database.deleteOne({userID: new ObjectId(decodedToken.userID)}, database.collection.pendingUsersUpdates)
-  
-        //add user to pendingUsersUpdates collection
-        await database.insertOne({userID: new ObjectId(decodedToken.userID), createdAt: new Date(), otp: newOtp, dataToUpdate: {parameter: 'username', value: payload.username}}, database.collection.pendingUsersUpdates)
-          
-        console.log("hello")
-        //send the new otp to the new email
-        await email.sendOTP('medpharmconsult7@gmail.com', adminObj.email, "OTP Verification", email.OtpMessage(adminObj.username, "username", newOtp))
+          //delete a userID if it exist in the pendingUsersUpdates
+          await new PendingUserUpdate().deleteOne({userID: new ObjectId(decodedToken.userID)})
         
-        //send token
-        utilities.setResponseData(res, 200, {'content-type': 'application/json'}, {statusCode: 200, msg: "An OTP has been sent to your email"}, true )
-  
-  
+          //add user to pendingUsersUpdates collection
+          await new PendingUserUpdate({userID: new ObjectId(decodedToken.userID), otp: newOtp, dataToUpdate: {parameter: 'username', value: payload.username}}).save()
+           
+          //send the new otp to the new email
+          await email.sendText('medpharmconsult7@gmail.com', adminProps.email, "OTP Verification", email.OtpMessage(adminProps.username, "username", newOtp))
+        
+          //send token
+          utilities.setResponseData(res, 200, {'content-type': 'application/json'}, {statusCode: 200, msg: "An OTP has been sent to your email"}, true )
+
+        }
+        else{
+          utilities.setResponseData(res, 400, {'content-type': 'application/json'}, {statusCode: 400, msg: `Invalid password`}, true )
+          return
+        }
       }
       else{
-        utilities.setResponseData(res, 400, {'content-type': 'application/json'}, {statusCode: 400, msg: `Invalid password`}, true )
+        utilities.setResponseData(res, 400, {'content-type': 'application/json'}, {statusCode: 400, msg: `username already exist`}, true )
         return
       }
-  
     }
     else{
       utilities.setResponseData(res, 400, {'content-type': 'application/json'}, {statusCode: 400, msg: utilities.usernameValidator(payload).msg}, true )

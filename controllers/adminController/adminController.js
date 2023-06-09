@@ -1,6 +1,7 @@
 
 const database = require("../../lib/database");
 const Admin = require("../../models/admin")
+const PendingAdmin = require("../../models/pendingAdmin")
 const utilities = require("../../lib/utilities");
 
 
@@ -19,19 +20,22 @@ adminController.acceptInvitation = ('/acccept-invitation', async (req, res)=>{
       payload = utilities.trimmer(payload)
   
       //get pending admin object
-      const pendingAdminObj = await database.findOne({username: payload.username}, database.collection.pendingAdmins)
+      const pendingAdminObj = new PendingAdmin()
+      const pendingAdminProps = await pendingAdminObj.getPropsOne({username: payload.username})
+      //const pendingAdminObj = await database.findOne({username: payload.username}, database.collection.pendingAdmins)
 
-      if(pendingAdminObj){
+      if(pendingAdminProps){
         //check if otp from payload matches otp from pendingAdminObj
-        if(payload.otp == pendingAdminObj.otp){
+        if(payload.otp == pendingAdminProps.otp){
           //remove the otp
-          delete pendingAdminObj.otp
+          delete pendingAdminProps.otp
 
           //delete pendingAdmin from the collection
-          await database.deleteOne({_id: pendingAdminObj._id}, database.collection.pendingAdmins)
+          await pendingAdminObj.deleteOne({_id: pendingAdminProps._id})
+          //await database.deleteOne({_id: pendingAdminObj._id}, database.collection.pendingAdmins)
 
           // transfer pendingAdminObj to admin collection
-          await new Admin(pendingAdminObj).save()
+          await new Admin(pendingAdminProps).save()
 
           //send response
           utilities.setResponseData(res, 200, {'content-type': 'application/json'}, {statusCode: 200, msg: "success"}, true )

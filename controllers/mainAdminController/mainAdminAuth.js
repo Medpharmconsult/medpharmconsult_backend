@@ -1,4 +1,5 @@
 const database = require("../../lib/database")
+const MainAdmin = require("../../models/mainAdmin")
 
 const utilities = require("../../lib/utilities")
 
@@ -19,13 +20,14 @@ mainAdminAuth.login = ('/login', async (req, res)=>{
       payload.password = utilities.dataHasher(payload.password)
 
       //Check if the username exists
-      const mainAdminObj = await database.findOne({username: payload.username}, database.collection.mainAdmins)
+      const mainAdminProps = await new MainAdmin().getPropsOne({username: payload.username})
+      //await database.findOne({username: payload.username}, database.collection.mainAdmins)
             
-      if(mainAdminObj){
+      if(mainAdminProps){
         //check if the password from the client matches the password from the database
-        if(payload.password === mainAdminObj.password){
+        if(payload.password === mainAdminProps.password){
           //send response
-          const token = utilities.jwt('sign', {userID: mainAdminObj._id, tokenFor: "mainAdmin"})
+          const token = utilities.jwt('sign', {userID: mainAdminProps._id, tokenFor: "mainAdmin"})
           utilities.setResponseData(res, 200, {'content-type': 'application/json'}, {statusCode: 200, mpcToken: token}, true )
         }
         else{

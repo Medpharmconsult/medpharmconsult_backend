@@ -16,6 +16,7 @@ router.get("/mainadmin/login", bodyParser, isJSON, mainAdminAuth.login)
 
 //MAIN ADMIN CONTROLLER
 router.post('/mainadmin/add-admin', bodyParser, isJwtValid, decodeToken, isMainAdmin, isJSON, mainAdminController.addAdmin)
+router.delete('/mainadmin/delete-admin', isJwtValid, decodeToken, isMainAdmin, mainAdminController.deleteAdmin)
 
 //ADMIN AUTH
 router.get("/admin/login", bodyParser, isJSON, adminAuth.login)
@@ -27,4 +28,7 @@ router.put('/admin/update-username', bodyParser, isJwtValid, decodeToken, isUser
 //ADMIN CONTROLLER
 router.post('/admin/accept-invitation', bodyParser, isJSON, adminController.acceptInvitation)
 
+//PROFESSIONAL AUTH
+
+//PROFESSIONAL CONTROLLER
 module.exports = router
